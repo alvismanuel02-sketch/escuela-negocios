@@ -63,6 +63,10 @@ export function vistaResumen(el) {
   if (exceden.length) alertas.push(['ocre', 'alerta', `${exceden.length} ${exceden.length === 1 ? 'préstamo supera' : 'préstamos superan'} el límite de exposición (${fondo.limiteExposicion} veces el capital del socio)`, '#/riesgo', 'Ver detalle']);
   if (sinPlan.length) alertas.push(['azul', 'info', `${sinPlan.length} ${sinPlan.length === 1 ? 'préstamo activo no tiene' : 'préstamos activos no tienen'} plan de cuotas: ${sinPlan.map(({ p }) => `<a href="#/prestamo/${p.id}">${esc(nombreDe(p))}</a>`).join(', ')}`, '', '']);
   if (provision > 0) alertas.push(['azul', 'riesgo', `Provisión sugerida por cartera en riesgo: ${cop(provision)}`, '#/riesgo', 'Ver panel de riesgo']);
+  if (fondo.ultimoSaldo && Math.abs(Number(fondo.ultimoSaldo.valor) - fondo.cajaEsperada) >= 1000) {
+    const d = Number(fondo.ultimoSaldo.valor) - fondo.cajaEsperada;
+    alertas.push(['ocre', 'disponible', `La cuenta tiene ${cop(fondo.ultimoSaldo.valor)} (al ${fecha(fondo.ultimoSaldo.fecha)}): ${cop(Math.abs(d))} ${d > 0 ? 'más' : 'menos'} de lo que explican los registros.`, '#/inversiones', 'Ver conciliación']);
+  }
   if (fondo.disponible < 0) alertas.push(['rojo', 'alerta', `Hay ${cop(-fondo.disponible)} más prestado que el capital libre del fondo.`, '', '']);
   if (!alertas.length) alertas.push(['verde', 'ok', 'Todo al día: no hay cuotas vencidas ni préstamos por encima del límite.', '', '']);
 
@@ -74,7 +78,7 @@ export function vistaResumen(el) {
     ${kpi('capital', '', 'Capital total del fondo', cop(fondo.capital))}
     ${kpi('prestamos', 'azul', 'En préstamos', cop(fondo.colocado), `${pct(pctColocado)} del capital`)}
     ${kpi('disponible', '', 'Disponible para prestar', cop(fondo.disponible), '', fondo.disponible < 0 ? 'rojo' : 'verde')}
-    ${kpi('activos', 'ocre', 'Otros activos', cop(fondo.inmovilizado), esc(fondo.inmovilizadoDesc))}
+    ${kpi('activos', 'ocre', 'Otros activos', cop(fondo.inmovilizado), `<a href="#/inversiones">${esc(fondo.inmovilizadoDesc || 'Ver inversiones')}</a>`)}
     ${kpi('intereses', 'morado', 'Intereses por cobrar', cop(fondo.interesesPorCobrar))}
   </div>
 
@@ -513,7 +517,7 @@ export function vistaPrestamo(el, id) {
       <dl class="datos">
         <div><dt>Capital pendiente</dt><dd>${cop(l.capital)}</dd></div>
         <div><dt>Intereses pendientes</dt><dd>${cop(l.intPend)}</dd></div>
-        <div><dt>Total abonado en efectivo</dt><dd>${cop(l.efectivo)}</dd></div>
+        <div><dt>Total abonado</dt><dd>${cop(l.efectivo)}</dd></div>
         <div><dt>Cruzado con su capital</dt><dd>${cop(l.cruzado)}</dd></div>
         <div><dt>Intereses generados</dt><dd>${cop(l.totalInt)}</dd></div>
       </dl></section>
@@ -646,7 +650,7 @@ function formPago(cont, p, modo) {
     <div class="rejilla">
       <label class="campo"><span>Fecha del pago</span><input type="date" name="fecha" value="${hoyISO() < p.fecha ? p.fecha : hoyISO()}"></label>
       <label class="campo"><span>Valor recibido</span>${inputPesos('valor')}</label>
-      <label class="campo"><span>Tipo</span><select name="tipo"><option value="abono" ${tipo === 'abono' ? 'selected' : ''}>Abono en efectivo</option><option value="cruce" ${tipo === 'cruce' ? 'selected' : ''}>Cruce con su capital</option></select></label>
+      <label class="campo"><span>Tipo</span><select name="tipo"><option value="abono" ${tipo === 'abono' ? 'selected' : ''}>Abono (efectivo o transferencia)</option><option value="cruce" ${tipo === 'cruce' ? 'selected' : ''}>Cruce con su capital</option></select></label>
     </div>
     <p class="ayuda" data-ayuda></p>
     <label class="campo"><span>Nota</span><input name="nota" placeholder="Opcional"></label>

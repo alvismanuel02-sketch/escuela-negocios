@@ -29,10 +29,10 @@ validados con `npm test`.
 | `modelo.js` | Saldos del fondo, de cada socio y estado de cada plan |
 | `app.js`, `ui.js` | Ingreso, menú, rutas y piezas comunes |
 | `vistas.js` | Inicio, miembros, ficha del socio, préstamos |
-| `vistas-fondo.js` | Movimientos, panel de riesgo, configuración y auditoría |
+| `vistas-fondo.js` | Movimientos, panel de riesgo, inversiones y caja, configuración y auditoría |
 | `extractos.js` | Extractos en PDF: individuales y todos juntos, descargar y compartir |
 | `datos.js`, `config.js`, `formato.js` | Conexión a Supabase y formato de pesos y fechas |
-| `001_…sql`, `002_…sql` | Estructura de la base, seguridad y auditoría |
+| `001_…sql`, `002_…sql`, `003_…sql` | Estructura de la base, seguridad, auditoría, inversiones y saldos de caja |
 | `motor.test.mjs` | Pruebas del motor |
 
 Todos los archivos van en la raíz del repositorio, sin carpetas.

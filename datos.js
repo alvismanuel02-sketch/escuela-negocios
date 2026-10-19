@@ -20,13 +20,15 @@ function traducirError(error) {
 }
 
 export async function cargarTodo() {
-  const [miembros, movimientos, prestamos, pagos, configuracion, administradores] = await Promise.all([
+  const [miembros, movimientos, prestamos, pagos, configuracion, administradores, inversiones, saldosCaja] = await Promise.all([
     sb.from('miembros').select('*').order('nombre'),
     sb.from('movimientos_capital').select('*').order('fecha'),
     sb.from('prestamos').select('*').order('fecha'),
     sb.from('pagos').select('*').order('fecha'),
     sb.from('configuracion').select('*'),
     sb.from('administradores').select('email, nombre').order('nombre'),
+    sb.from('inversiones').select('*').order('fecha'),
+    sb.from('saldos_caja').select('*').order('fecha'),
   ]);
   const config = {};
   for (const c of revisar(configuracion)) config[c.clave] = c.valor;
@@ -37,6 +39,8 @@ export async function cargarTodo() {
     pagos: revisar(pagos),
     config,
     administradores: revisar(administradores),
+    inversiones: revisar(inversiones),
+    saldosCaja: revisar(saldosCaja),
   };
 }
 

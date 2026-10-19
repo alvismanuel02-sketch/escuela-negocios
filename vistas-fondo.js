@@ -1,9 +1,10 @@
 // Pantallas del fondo completo: movimientos, panel de riesgo y configuración con auditoría.
 import { franjaMora } from './motor.js';
 import { cop, fecha, fechaLarga, esc, leerPesos, pct } from './formato.js';
-import { guardarConfig, cargarAuditoria } from './datos.js';
+import { guardarConfig, cargarAuditoria, insertar, borrar } from './datos.js';
 import { ic } from './iconos.js';
-import { estado, app, avatar, kpi, vacio, diasTxt, nombreDe, dona, pildoras, inputPesos, activarPesos, guardar, aviso } from './ui.js';
+import { estado, app, avatar, kpi, vacio, diasTxt, nombreDe, dona, pildoras, inputPesos, activarPesos, guardar, aviso, accion } from './ui.js';
+import { hoyISO } from './motor.js';
 import { estadoPrestamo, filasClic } from './vistas.js';
 
 const TIPOS_MOV = { saldo_inicial: 'Saldo inicial', aporte: 'Aporte', retiro: 'Retiro', utilidad: 'Utilidad', ajuste: 'Ajuste' };
@@ -11,6 +12,7 @@ const BADGE = {
   desembolso: ['Desembolso', 'naranja'], abono: ['Abono', 'bien'], cruce: ['Cruce', 'morado'],
   saldo_inicial: ['Saldo inicial', 'azul'], aporte: ['Aporte', 'azul'], retiro: ['Retiro', 'mal'],
   utilidad: ['Utilidad', 'azul'], ajuste: ['Ajuste', ''],
+  inversion: ['Inversión', 'aviso'], retorno: ['Retorno de inversión', 'bien'],
 };
 
 // ═══════════════════════ Movimientos del fondo ═══════════════════════
@@ -34,6 +36,9 @@ function libroDelFondo() {
       filas.push({ fecha: mv.fecha, tipo: mv.tipo, desc: mv.nota || TIPOS_MOV[mv.tipo], miembro: x.nombre, valor: Number(mv.valor), ir: `#/miembro/${x.id}`, orden: 2 });
     }
   }
+  for (const inv of m.fondo.inversiones) {
+    filas.push({ fecha: inv.fecha, tipo: Number(inv.valor) > 0 ? 'inversion' : 'retorno', desc: `${inv.concepto} (${inv.proyecto})`, miembro: 'Escuela de Negocios', valor: -Number(inv.valor), ir: '#/inversiones', orden: 3 });
+  }
   return filas.sort((a, b) => (a.fecha === b.fecha ? a.orden - b.orden : a.fecha < b.fecha ? 1 : -1));
 }
 
@@ -43,6 +48,7 @@ const GRUPOS = {
   abonos: (f) => f.tipo === 'abono',
   cruces: (f) => f.tipo === 'cruce',
   capital: (f) => f.tipo in TIPOS_MOV,
+  inversiones: (f) => f.tipo === 'inversion' || f.tipo === 'retorno',
 };
 
 export function vistaMovimientos(el) {
@@ -66,7 +72,7 @@ export function vistaMovimientos(el) {
         <label class="campo" style="margin:0;grid-template-columns:auto 1fr;align-items:center"><span>Hasta</span><input type="date" id="mov-hasta" value="${hasta}"></label>
       </div>
     </div>
-    <div class="filtros" style="margin-top:12px">${pildoras([['todos', `Todos (${cuenta('todos')})`], ['desembolsos', `Desembolsos (${cuenta('desembolsos')})`], ['abonos', `Abonos (${cuenta('abonos')})`], ['cruces', `Cruces (${cuenta('cruces')})`], ['capital', `Capital (${cuenta('capital')})`]], g, 'data-grupo')}</div>
+    <div class="filtros" style="margin-top:12px">${pildoras([['todos', `Todos (${cuenta('todos')})`], ['desembolsos', `Desembolsos (${cuenta('desembolsos')})`], ['abonos', `Abonos (${cuenta('abonos')})`], ['cruces', `Cruces (${cuenta('cruces')})`], ['capital', `Capital (${cuenta('capital')})`], ['inversiones', `Inversiones (${cuenta('inversiones')})`]], g, 'data-grupo')}</div>
     ${lista.length ? `<div class="tabla-envoltura"><table class="tabla">
       <thead><tr><th>Fecha</th><th>Tipo</th><th class="ocultar-movil">Descripción</th><th>Miembro</th><th class="d">Valor</th></tr></thead>
       <tbody>${lista.slice(0, limite).map((f) => {
@@ -196,7 +202,7 @@ export function vistaRiesgo(el) {
 
 // ═══════════════════════ Configuración y auditoría ═══════════════════════
 
-const TABLAS = { pagos: 'pago', prestamos: 'préstamo', miembros: 'miembro', movimientos_capital: 'movimiento de capital', configuracion: 'configuración', administradores: 'administrador' };
+const TABLAS = { inversiones: 'inversión', saldos_caja: 'saldo de caja', pagos: 'pago', prestamos: 'préstamo', miembros: 'miembro', movimientos_capital: 'movimiento de capital', configuracion: 'configuración', administradores: 'administrador' };
 const ACCIONES = { INSERT: 'Creación', UPDATE: 'Cambio', DELETE: 'Borrado' };
 
 export function vistaConfiguracion(el) {
@@ -226,15 +232,9 @@ export function vistaConfiguracion(el) {
     </section>
     <section class="tarjeta">
       <div class="tarjeta-cab"><h2 class="h2">Otros activos del fondo</h2></div>
-      <form id="f-activos" novalidate>
-        <div class="rejilla">
-          <label class="campo"><span>Valor</span>${inputPesos('valor', fondo.inmovilizado)}</label>
-          <label class="campo"><span>Descripción</span><input name="desc" value="${esc(fondo.inmovilizadoDesc)}"></label>
-        </div>
-        <p class="ayuda">Este valor se descuenta del capital disponible para prestar.</p>
-        <p class="error" hidden></p>
-        <button class="btn" type="submit">Guardar</button>
-      </form>
+      <div class="kpi-v">${cop(fondo.inmovilizado)}</div>
+      <p class="sub peq" style="margin-bottom:14px">${esc(fondo.inmovilizadoDesc || 'Sin inversiones registradas')}. Es la suma de las inversiones de la Escuela y se descuenta del capital disponible para prestar.</p>
+      <a class="btn sec" href="#/inversiones">${ic('activos', 17)}Ver inversiones y caja</a>
     </section>
     <section class="tarjeta">
       <div class="tarjeta-cab"><h2 class="h2">Administradores</h2></div>
@@ -253,12 +253,6 @@ export function vistaConfiguracion(el) {
     if (!(v >= 1 && v <= 20)) throw new Error('Escribe un número entre 1 y 20.');
     await guardarConfig('limite_exposicion', v);
     await app.recargar(); aviso('Límite guardado');
-  });
-  const fa = el.querySelector('#f-activos');
-  activarPesos(fa);
-  fa.onsubmit = (ev) => guardar(ev, fa, async () => {
-    await guardarConfig('activos_inmovilizados', { valor: leerPesos(fa.valor.value), descripcion: fa.desc.value.trim() });
-    await app.recargar(); aviso('Otros activos guardados');
   });
   pintarAuditoria(el.querySelector('#auditoria'));
 }
@@ -304,6 +298,128 @@ function detalle(r) {
     case 'miembros': return `${d.nombre || ''}${cambios()}`;
     case 'configuracion': return d.clave === 'limite_exposicion' ? `Límite de exposición: ${JSON.stringify(d.valor)}` : d.clave === 'activos_inmovilizados' ? `Otros activos: ${cop(d.valor?.valor)} ${d.valor?.descripcion || ''}` : String(d.clave || '');
     case 'administradores': return String(d.email || '');
+    case 'inversiones': return `${d.concepto || ''} (${d.proyecto || ''}): ${cop(d.valor)} del ${fecha(d.fecha)}${cambios()}`;
+    case 'saldos_caja': return `Saldo real de la cuenta: ${cop(d.valor)} al ${fecha(d.fecha)}${cambios()}`;
     default: return '';
   }
+}
+
+// ═══════════════════════ Inversiones y caja ═══════════════════════
+
+export function vistaInversiones(el) {
+  const f = estado.modelo.fondo;
+  const invs = f.inversiones.slice().sort((a, b) => b.fecha.localeCompare(a.fecha));
+  const saldos = (estado.datos.saldosCaja || []).slice().sort((a, b) => b.fecha.localeCompare(a.fecha));
+  const real = f.ultimoSaldo;
+  const dif = real ? Number(real.valor) - f.cajaEsperada : null;
+  const proyectos = [...new Set((estado.datos.inversiones || []).map((x) => x.proyecto))];
+  const porProyecto = proyectos.map((p) => [p, f.inversiones.filter((x) => x.proyecto === p).reduce((s, x) => s + Number(x.valor), 0)]);
+
+  el.innerHTML = `
+  <div class="cabeza"><div><h1 class="h1">Inversiones y caja</h1>
+    <p class="sub">Lo que la Escuela tiene invertido fuera de los préstamos y cuánto dinero debería haber en la cuenta.</p></div>
+    <div class="cabeza-acc"><button class="btn" id="nueva-inv">${ic('mas', 17)}Registrar inversión</button>
+      <button class="btn sec" id="nuevo-saldo">${ic('disponible', 17)}Registrar saldo de la cuenta</button></div></div>
+  <div id="form-inv"></div>
+
+  <div class="kpis">
+    ${kpi('activos', 'ocre', 'Otros activos (invertido)', cop(f.inmovilizado), porProyecto.map(([p, v]) => `${esc(p)}: ${cop(v)}`).join(', ') || 'Sin inversiones')}
+    ${kpi('disponible', '', 'Disponible para prestar', cop(f.disponible), 'Capital − prestado − invertido', f.disponible < 0 ? 'rojo' : 'verde')}
+    ${kpi('capital', 'azul', 'Debería haber en la cuenta', cop(f.cajaEsperada), `Incluye ${cop(f.interesesCobrados)} de intereses cobrados`)}
+    ${kpi('ok', real ? (Math.abs(dif) < 1000 ? '' : 'rojo') : 'azul', 'Saldo real en la cuenta', real ? cop(real.valor) : 'Sin registrar', real ? `Al ${fecha(real.fecha)}` : 'Regístralo para comparar')}
+  </div>
+
+  <div class="rejilla-2 ancha-izq" style="margin-top:16px">
+    <section class="tarjeta sin-relleno">
+      <div class="tarjeta-cab"><h2 class="h2">Inversiones de la Escuela</h2></div>
+      ${invs.length ? `<div class="tabla-envoltura"><table class="tabla">
+        <thead><tr><th>Fecha</th><th>Proyecto</th><th>Concepto</th><th class="d">Valor</th><th></th></tr></thead>
+        <tbody>${invs.map((x) => `<tr><td class="num">${fecha(x.fecha)}</td><td>${esc(x.proyecto)}</td>
+          <td>${esc(x.concepto)}${x.nota ? `<span class="celda-sub">${esc(x.nota)}</span>` : ''}</td>
+          <td class="d num fuerte ${Number(x.valor) < 0 ? 'bien-t' : ''}">${cop(x.valor)}</td>
+          <td class="d"><button class="btn-x" data-borrar-inv="${x.id}" aria-label="Borrar inversión">×</button></td></tr>`).join('')}</tbody>
+        <tfoot><tr><td colspan="3">Total invertido</td><td class="d num">${cop(f.inmovilizado)}</td><td></td></tr></tfoot>
+      </table></div>` : vacio('Todavía no hay inversiones registradas.')}
+      <p class="nota-pie" style="padding:0 20px 16px">Los valores negativos son dinero que volvió a la Escuela (venta o devolución).</p>
+    </section>
+
+    <section class="tarjeta">
+      <div class="tarjeta-cab"><h2 class="h2">Conciliación de caja</h2><span class="peq tenue">Al ${fecha(estado.corte)}</span></div>
+      <dl class="datos">
+        <div><dt>Capital de los socios</dt><dd>${cop(f.capital)}</dd></div>
+        <div><dt>Menos capital prestado</dt><dd>${cop(-f.colocado)}</dd></div>
+        <div><dt>Menos inversiones</dt><dd>${cop(-f.inmovilizado)}</dd></div>
+        <div><dt>Más intereses cobrados desde el ${fecha(f.apertura)}</dt><dd>${cop(f.interesesCobrados)}</dd></div>
+        <div style="border-top:1px solid var(--linea);padding-top:10px"><dt class="fuerte" style="color:var(--tinta)">Debería haber en la cuenta</dt><dd>${cop(f.cajaEsperada)}</dd></div>
+        <div><dt>Saldo real${real ? ` (${fecha(real.fecha)})` : ''}</dt><dd>${real ? cop(real.valor) : '—'}</dd></div>
+        ${real ? `<div><dt class="fuerte" style="color:var(--tinta)">Diferencia</dt><dd class="${Math.abs(dif) < 1000 ? 'bien-t' : 'mal-t'}">${dif > 0 ? '+' : ''}${cop(dif)}</dd></div>` : ''}
+      </dl>
+      ${real && Math.abs(dif) >= 1000 ? `<p class="nota-pie">${dif > 0
+        ? 'Hay más dinero en la cuenta del que explican los registros. Puede venir de intereses cobrados antes de la apertura que aún no se han repartido, o de aportes o ingresos que no se registraron.'
+        : 'Hay menos dinero en la cuenta del que explican los registros. Puede venir de gastos, desembolsos o inversiones que no se registraron.'}</p>` : ''}
+      ${saldos.length > 1 ? `<p class="nota-pie">Saldos anteriores: ${saldos.slice(1, 6).map((x) => `${cop(x.valor)} el ${fecha(x.fecha)}`).join('; ')}.</p>` : ''}
+    </section>
+  </div>`;
+
+  el.querySelector('#nueva-inv').onclick = () => formInversion(el.querySelector('#form-inv'), proyectos);
+  el.querySelector('#nuevo-saldo').onclick = () => formSaldo(el.querySelector('#form-inv'));
+  el.querySelectorAll('[data-borrar-inv]').forEach((b) => {
+    b.onclick = async () => {
+      if (!confirm('¿Borrar esta inversión? Queda registrado en la auditoría.')) return;
+      await accion(async () => { await borrar('inversiones', b.dataset.borrarInv); await app.recargar(); aviso('Inversión borrada'); });
+    };
+  });
+}
+
+function formInversion(cont, proyectos) {
+  cont.innerHTML = `
+  <form class="form" novalidate>
+    <h2 class="h2">Registrar inversión</h2>
+    <div class="rejilla">
+      <label class="campo"><span>Tipo</span><select name="tipo"><option value="1">Inversión de la Escuela (sale dinero)</option><option value="-1">Retorno o venta (entra dinero)</option></select></label>
+      <label class="campo"><span>Fecha</span><input type="date" name="fecha" value="${hoyISO()}"></label>
+      <label class="campo"><span>Proyecto</span><input name="proyecto" list="lista-proyectos" value="${esc(proyectos[0] || 'Ganadería')}"></label>
+      <label class="campo"><span>Valor</span>${inputPesos('valor')}</label>
+    </div>
+    <datalist id="lista-proyectos">${proyectos.map((p) => `<option value="${esc(p)}">`).join('')}</datalist>
+    <label class="campo"><span>Concepto</span><input name="concepto" placeholder="Ej.: compra de terneros, alquiler de báscula"></label>
+    <label class="campo"><span>Nota</span><input name="nota" placeholder="Opcional"></label>
+    <p class="error" hidden></p>
+    <div class="acciones"><button class="btn" type="submit">Registrar</button><button class="btn sec" type="button" data-cancelar>Cancelar</button></div>
+  </form>`;
+  const f = cont.querySelector('form');
+  activarPesos(f);
+  f.querySelector('[data-cancelar]').onclick = () => { cont.innerHTML = ''; };
+  f.onsubmit = (ev) => guardar(ev, f, async () => {
+    const v = leerPesos(f.valor.value);
+    if (v <= 0) throw new Error('Escribe el valor.');
+    if (!f.fecha.value) throw new Error('Elige la fecha.');
+    if (!f.proyecto.value.trim()) throw new Error('Escribe el proyecto.');
+    if (!f.concepto.value.trim()) throw new Error('Escribe el concepto.');
+    await insertar('inversiones', { fecha: f.fecha.value, proyecto: f.proyecto.value.trim(), concepto: f.concepto.value.trim(), valor: v * Number(f.tipo.value), nota: f.nota.value.trim() || null });
+    await app.recargar(); aviso('Inversión registrada');
+  });
+}
+
+function formSaldo(cont) {
+  cont.innerHTML = `
+  <form class="form" novalidate>
+    <h2 class="h2">Saldo real de la cuenta</h2>
+    <p class="ayuda">Escribe lo que muestra la cuenta de la Escuela en una fecha. La app lo compara con lo que debería haber según los registros.</p>
+    <div class="rejilla">
+      <label class="campo"><span>Fecha</span><input type="date" name="fecha" value="${hoyISO()}"></label>
+      <label class="campo"><span>Saldo</span>${inputPesos('valor')}</label>
+      <label class="campo"><span>Nota</span><input name="nota" placeholder="Opcional"></label>
+    </div>
+    <p class="error" hidden></p>
+    <div class="acciones"><button class="btn" type="submit">Guardar saldo</button><button class="btn sec" type="button" data-cancelar>Cancelar</button></div>
+  </form>`;
+  const f = cont.querySelector('form');
+  activarPesos(f);
+  f.querySelector('[data-cancelar]').onclick = () => { cont.innerHTML = ''; };
+  f.onsubmit = (ev) => guardar(ev, f, async () => {
+    if (!f.fecha.value) throw new Error('Elige la fecha.');
+    await insertar('saldos_caja', { fecha: f.fecha.value, valor: leerPesos(f.valor.value), nota: f.nota.value.trim() || null });
+    await app.recargar(); aviso('Saldo guardado');
+  });
 }

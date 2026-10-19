@@ -5,7 +5,7 @@ import { fechaLarga, esc } from './formato.js';
 import { ic } from './iconos.js';
 import { estado, app, iniciales, mostrarError, aviso, nombreAdmin } from './ui.js';
 import { vistaResumen, vistaMiembros, vistaMiembro, vistaPrestamos, vistaPrestamo } from './vistas.js';
-import { vistaMovimientos, vistaRiesgo, vistaConfiguracion } from './vistas-fondo.js';
+import { vistaMovimientos, vistaRiesgo, vistaConfiguracion, vistaInversiones } from './vistas-fondo.js';
 import { vistaExtractos } from './extractos.js';
 
 const raiz = document.getElementById('app');
@@ -19,6 +19,7 @@ const SECCIONES = [
   ['prestamos', 'Préstamos', 'prestamos'],
   ['movimientos', 'Movimientos', 'movimientos'],
   ['riesgo', 'Panel de riesgo', 'riesgo'],
+  ['inversiones', 'Inversiones y caja', 'activos'],
   ['extractos', 'Extractos', 'extractos'],
   ['configuracion', 'Configuración', 'configuracion'],
 ];
@@ -26,7 +27,7 @@ const SECCIONES = [
 const VISTAS = {
   resumen: vistaResumen, miembros: vistaMiembros, miembro: vistaMiembro,
   prestamos: vistaPrestamos, prestamo: vistaPrestamo, movimientos: vistaMovimientos,
-  riesgo: vistaRiesgo, extractos: vistaExtractos, configuracion: vistaConfiguracion,
+  riesgo: vistaRiesgo, inversiones: vistaInversiones, extractos: vistaExtractos, configuracion: vistaConfiguracion,
 };
 
 // ═══════════════════════ Arranque y sesión ═══════════════════════

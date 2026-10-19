@@ -32,7 +32,18 @@ export function construirModelo(datos, corte) {
   const capitalFondo = miembros.reduce((s, m) => s + m.capital.total, 0);
   const colocado = activos.reduce((s, p) => s + p.liq.capital, 0);
   const interesesPorCobrar = activos.reduce((s, p) => s + p.liq.intPend, 0);
-  const inmov = Number(datos.config.activos_inmovilizados?.valor || 0);
+  // Otros activos: lo invertido en proyectos (positivo) menos lo que ha vuelto (negativo).
+  const inversiones = (datos.inversiones || []).filter((x) => x.fecha <= corte);
+  const inmov = inversiones.reduce((s, x) => s + Number(x.valor), 0);
+  const proyectos = [...new Set(inversiones.map((x) => x.proyecto))];
+
+  // Conciliación de caja: el dinero que debería haber en la cuenta.
+  // Capital de los socios − capital prestado − inversiones + intereses cobrados desde la apertura
+  // (la apertura es la fecha del saldo inicial; los intereses de antes ya están dentro del capital).
+  const apertura = (datos.movimientos || []).filter((x) => x.tipo === 'saldo_inicial').map((x) => x.fecha).sort()[0] || '0000-00-00';
+  const interesesCobrados = prestamos.reduce((s, p) => s + p.liq.filas.filter((f) => f.fecha > apertura).reduce((a, f) => a + f.aInt, 0), 0);
+  const saldosCaja = (datos.saldosCaja || []).filter((x) => x.fecha <= corte);
+  const ultimoSaldo = saldosCaja.length ? saldosCaja[saldosCaja.length - 1] : null;
 
   return {
     corte,
@@ -48,8 +59,13 @@ export function construirModelo(datos, corte) {
       interesesPorCobrar,
       deuda: colocado + interesesPorCobrar,
       inmovilizado: inmov,
-      inmovilizadoDesc: datos.config.activos_inmovilizados?.descripcion || '',
+      inmovilizadoDesc: proyectos.length ? `Inversión en ${proyectos.join(', ')}` : '',
+      inversiones,
       disponible: capitalFondo - colocado - inmov,
+      apertura,
+      interesesCobrados,
+      cajaEsperada: capitalFondo - colocado - inmov + interesesCobrados,
+      ultimoSaldo,
       limiteExposicion: Number(datos.config.limite_exposicion || 3),
     },
   };

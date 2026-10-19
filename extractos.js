@@ -253,6 +253,78 @@ export async function pdfTodos(socios) {
   return { blob: h.doc.output('blob'), nombre: `Extractos_Escuela_de_Negocios_${estado.corte}.pdf` };
 }
 
+function encabezadoDoc(h, titulo, sub) {
+  h.fuente(8.5, 'bold', C.verde); h.doc.text('ESCUELA DE NEGOCIOS', M, h.y + 3);
+  h.fuente(8, 'normal', C.gris); h.doc.text('Fondo colaborativo de ahorro y préstamos', M, h.y + 7);
+  h.y += 13;
+  h.fuente(19, 'bold', C.tinta); h.doc.text(titulo, M, h.y + 5); h.y += 9;
+  h.fuente(9, 'normal', C.gris); h.doc.text(sub, M, h.y + 2); h.y += 5;
+  h.doc.setDrawColor(...C.tinta); h.doc.setLineWidth(0.5); h.doc.line(M, h.y, ANCHO - M, h.y); h.y += 4;
+}
+
+/** Informe de préstamos vigentes: resumen y, por préstamo, cuándo y cómo ha pagado. */
+export async function pdfPrestamosVigentes() {
+  const JsPDF = await precargarPDF();
+  const h = new Hoja(JsPDF);
+  const m = estado.modelo;
+  const nombre = (p) => m.miembroPorId[p.miembro_id]?.nombre || '';
+  const activos = m.activos.slice().sort((a, b) => b.liq.deuda - a.liq.deuda);
+  const socios = new Set(activos.map((p) => p.miembro_id)).size;
+  const suma = (f) => activos.reduce((s, p) => s + f(p), 0);
+  const abonado = (p) => p.liq.efectivo + p.liq.cruzado;
+
+  encabezadoDoc(h, 'Préstamos vigentes', `Corte al ${fechaLarga(estado.corte)}. ${activos.length} préstamos de ${socios} socios.`);
+  h.titulo('La cartera en cifras');
+  h.cajas([
+    ['Prestado', cop(suma((p) => Number(p.monto)))],
+    ['Abonado hasta hoy', cop(suma(abonado)), C.verde],
+    ['Capital pendiente', cop(suma((p) => p.liq.capital))],
+    ['Intereses por cobrar', cop(suma((p) => p.liq.intPend))],
+    ['Total por cobrar', cop(suma((p) => p.liq.deuda)), C.rojo],
+  ], 13);
+
+  h.titulo('Resumen por préstamo');
+  h.tabla([{ t: 'Socio', w: 42 }, { t: 'Préstamo', w: 24, a: 'r' }, { t: 'Desembolso', w: 22 }, { t: 'Abonado', w: 24, a: 'r' },
+    { t: 'Capital pend.', w: 25, a: 'r' }, { t: 'Debe hoy', w: 25, a: 'r' }, { t: 'Sin abonar', w: 20, a: 'r' }],
+  activos.map((p) => [nombre(p), cop(p.monto), fecha(p.fecha), cop(abonado(p)), cop(p.liq.capital), cop(p.liq.deuda), p.liq.diasSinAbonar === 1 ? '1 día' : `${p.liq.diasSinAbonar} días`]),
+  { estilos: activos.map((p) => ({ negrita: [5], colores: { 6: p.franja?.clave === 'aldia' ? C.tinta : C.rojo } })),
+    total: ['Total', cop(suma((p) => Number(p.monto))), '', cop(suma(abonado)), cop(suma((p) => p.liq.capital)), cop(suma((p) => p.liq.deuda)), ''] });
+  h.texto('"Debe hoy" es el capital pendiente más los intereses corridos hasta la fecha de corte. "Abonado" suma los abonos en dinero y los cruces con capital.', 8, 'normal', C.gris);
+
+  h.doc.addPage(); h.y = M;
+  h.fuente(13, 'bold', C.tinta); h.doc.text('Pagos de cada préstamo', M, h.y + 5); h.y += 8;
+  h.texto('Cada pago cubre primero los intereses corridos y el resto baja el capital. "Abono" es un pago en dinero (efectivo o transferencia); "Cruce con capital" es un pago descontado del capital que el socio tiene en el fondo.', 8.5, 'normal', C.gris);
+
+  for (const p of activos) {
+    const l = p.liq;
+    const plan = planConEstado(p, estado.corte);
+    h.asegurar(40);
+    h.titulo(`${nombre(p)}  |  Préstamo de ${cop(p.monto)}`);
+    h.texto(`Desembolsado el ${fechaLarga(p.fecha)}. Tasa: ${describirTasa(Number(p.monto), Number(p.capital_respaldo || 0), p.tasa_fija ? Number(p.tasa_fija) : null, cop)}.`, 9);
+    h.texto(plan
+      ? `Plan: ${plan.cuotas.length === 1 ? '1 cuota' : `${plan.cuotas.length} cuotas`} ${(p.plan?.cadaDias || 15) === 30 ? (plan.cuotas.length === 1 ? 'mensual' : 'mensuales') : (plan.cuotas.length === 1 ? 'quincenal' : 'quincenales')} desde el ${fecha(plan.desde)}. ${plan.vencidas ? `${plan.vencidas === 1 ? '1 vencida' : `${plan.vencidas} vencidas`}, ${cop(plan.valorVencido)} atrasado.` : plan.proxima ? `Próxima cuota ${cop(plan.proxima.cuota)} el ${fecha(plan.proxima.fecha)}.` : 'Plan completo.'}`
+      : 'Sin plan de cuotas acordado.', 9, 'normal', plan?.vencidas ? C.rojo : C.gris);
+    h.espacio(1);
+    if (l.filas.length) {
+      const filas = l.filas.map((f) => [fecha(f.fecha), f.tipo === 'cruce' ? 'Cruce con capital' : 'Abono', cop(f.valor), cop(f.aInt), cop(f.aCap), cop(f.saldo)]);
+      h.tabla([{ t: 'Fecha', w: 24 }, { t: 'Cómo pagó', w: 36 }, { t: 'Valor pagado', w: 30, a: 'r' }, { t: 'A interés', w: 28, a: 'r' }, { t: 'A capital', w: 28, a: 'r' }, { t: 'Saldo después', w: 30, a: 'r' }],
+        filas, { estilos: l.filas.map((f) => ({ negrita: [2], colores: { 1: f.tipo === 'cruce' ? C.verde : C.tinta } })),
+          total: ['', 'Total', cop(l.efectivo + l.cruzado), cop(l.filas.reduce((s, f) => s + f.aInt, 0)), cop(l.filas.reduce((s, f) => s + f.aCap, 0)), ''] });
+      const notas = l.filas.filter((f) => f.nota);
+      if (notas.length) h.texto(`Notas: ${notas.map((f) => `${fecha(f.fecha)}, ${f.nota}`).join('. ')}.`, 8, 'italic', C.gris);
+    } else {
+      h.texto('No ha registrado pagos desde el desembolso.', 9, 'italic', C.rojo);
+    }
+    h.espacio(1);
+    h.cajas([
+      ['Abonado', cop(l.efectivo)], ['Con cruce', cop(l.cruzado)], ['Capital pendiente', cop(l.capital)],
+      ['Intereses pendientes', cop(l.intPend)], ['Debe hoy', cop(l.deuda), C.rojo],
+    ], 13);
+  }
+  h.pies(`Escuela de Negocios   Préstamos vigentes al ${fecha(estado.corte)}`);
+  return { blob: h.doc.output('blob'), nombre: `Prestamos_vigentes_${estado.corte}.pdf` };
+}
+
 // ── Descargar, ver y compartir ──
 
 function descargar({ blob, nombre }) {
@@ -344,6 +416,19 @@ export function vistaExtractos(el) {
     </div>
   </section>
 
+  <section class="tarjeta" style="margin-top:16px">
+    <div class="ficha">
+      <span class="kpi-i azul" style="margin:0;width:44px;height:44px">${ic('prestamos', 22)}</span>
+      <div class="ficha-t"><h2 class="h2">Informe de préstamos vigentes</h2>
+        <p class="sub peq">${estado.modelo.activos.length} préstamos: cuánto debe cada socio hoy y cuándo y cómo ha pagado (abono o cruce con capital).</p></div>
+      <div class="acciones">
+        <button class="btn" data-informe="descargar">${ic('descargar', 17)}Descargar PDF</button>
+        <button class="btn sec" data-informe="compartir">${ic('compartir', 17)}Compartir</button>
+        <button class="btn sec" data-informe="ver">${ic('ver', 17)}Ver</button>
+      </div>
+    </div>
+  </section>
+
   <section class="tarjeta sin-relleno" style="margin-top:16px">
     <div class="tarjeta-cab"><h2 class="h2">Extractos individuales</h2></div>
     <div class="filtros">
@@ -379,6 +464,18 @@ export function vistaExtractos(el) {
         const archivo = await pdfTodos(todos);
         if (modo === 'descargar') { descargar(archivo); aviso(`Se descargó el PDF con ${todos.length} extractos`); }
         else await compartir(archivo, `Extractos de la Escuela de Negocios con corte al ${fecha(estado.corte)}.`, '');
+      } finally { b.disabled = false; }
+    });
+  });
+  el.querySelectorAll('[data-informe]').forEach((b) => {
+    b.onclick = () => accion(async () => {
+      const modo = b.dataset.informe;
+      if (modo === 'ver') return verPDF(pdfPrestamosVigentes());
+      b.disabled = true;
+      try {
+        const archivo = await pdfPrestamosVigentes();
+        if (modo === 'descargar') { descargar(archivo); aviso('Se descargó el informe de préstamos vigentes'); }
+        else await compartir(archivo, `Préstamos vigentes de la Escuela de Negocios con corte al ${fecha(estado.corte)}.`, '');
       } finally { b.disabled = false; }
     });
   });
