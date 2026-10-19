@@ -1,7 +1,0 @@
-node_modules/
-.DS_Store
-*.log
-# Nunca subir datos de socios
-seed*.sql
-*.xlsx
-*.csv
